@@ -176,7 +176,7 @@ static bool urngd_init(struct urngd *u)
 	u->rnd_fd.cb = low_entropy_cb;
 	u->rnd_fd.fd = open(DEV_RANDOM, O_WRONLY);
 	if (u->rnd_fd.fd < 1) {
-		ERROR(DEV_RANDOM " open failed: %s", strerror(errno));
+		ERROR(DEV_RANDOM " open failed: %s\n", strerror(errno));
 		return false;
 	}
 
@@ -225,10 +225,11 @@ int main(int argc, char **argv)
 		}
 	}
 
+	ulog_open(ulog_channels, LOG_DAEMON, "urngd");
+
 	if (!urngd_init(&urngd_service))
 		return -1;
 
-	ulog_open(ulog_channels, LOG_DAEMON, "urngd");
 	LOG("v%s started.\n", URNGD_VERSION);
 
 	gather_entropy(&urngd_service);
