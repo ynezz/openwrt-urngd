@@ -1,0 +1,7 @@
+variables:
+  CI_TARGET_BUILD_DEPENDS: urngd
+  GIT_SUBMODULE_STRATEGY: recursive
+
+include:
+  - remote: https://gitlab.com/ynezz/openwrt-ci/raw/master/openwrt-ci/gitlab/main.yml
+  - remote: https://gitlab.com/ynezz/openwrt-ci/raw/master/openwrt-ci/gitlab/pipeline.yml
