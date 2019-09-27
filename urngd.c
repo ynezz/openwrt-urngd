@@ -91,7 +91,7 @@ static size_t write_entropy(struct urngd *u, char *buf, size_t len,
 	if (0 > ret) {
 		ERROR("error injecting entropy: %s\n", strerror(errno));
 	} else {
-		DEBUG(1, "injected %ub (%ub of entropy)\n", len, entropy_bytes);
+		DEBUG(1, "injected %zub (%zub of entropy)\n", len, entropy_bytes);
 		written = len;
 	}
 
@@ -121,7 +121,7 @@ static size_t gather_entropy(struct urngd *u)
 	}
 
 	memset_secure(buf, 0, sizeof(buf));
-	DEBUG(2, DEV_RANDOM " fed with %lub of entropy\n", ret);
+	DEBUG(2, DEV_RANDOM " fed with %zub of entropy\n", ret);
 
 	return ret;
 }
