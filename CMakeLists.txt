@@ -4,7 +4,7 @@ PROJECT(urngd)
 INCLUDE(GNUInstallDirs)
 INCLUDE (FindPkgConfig)
 
-SET(URNGD_VERSION 1.0.0)
+SET(URNGD_VERSION 1.0.1)
 SET(JTEN_DIR 3rdparty/jitterentropy-rngd)
 
 FIND_PATH(ubox_include_dir NAMES libubox/usock.h)
