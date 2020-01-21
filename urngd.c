@@ -180,7 +180,7 @@ static bool urngd_init(struct urngd *u)
 		return false;
 	}
 
-	uloop_fd_add(&u->rnd_fd, ULOOP_READ);
+	uloop_fd_add(&u->rnd_fd, ULOOP_WRITE);
 
 	return true;
 }
@@ -227,14 +227,16 @@ int main(int argc, char **argv)
 
 	ulog_open(ulog_channels, LOG_DAEMON, "urngd");
 
-	if (!urngd_init(&urngd_service))
+	uloop_init();
+	if (!urngd_init(&urngd_service)) {
+		uloop_done();
 		return -1;
+	}
 
 	LOG("v%s started.\n", URNGD_VERSION);
 
 	gather_entropy(&urngd_service);
 
-	uloop_init();
 	uloop_run();
 	uloop_done();
 
