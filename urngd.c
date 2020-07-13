@@ -54,8 +54,8 @@
 #define OVERSAMPLINGFACTOR 2
 #define DEV_RANDOM "/dev/random"
 #define ENTROPYAVAIL "/proc/sys/kernel/random/entropy_avail"
-#define ENTROPYPOOLBYTES (sizeof(struct rand_pool_info) + \
-		(ENTROPYBYTES * OVERSAMPLINGFACTOR * sizeof(char)))
+#define ENTROPYPOOLBYTES \
+		(ENTROPYBYTES * OVERSAMPLINGFACTOR * sizeof(char))
 
 #ifdef URNGD_DEBUG
 unsigned int debug;
@@ -64,7 +64,6 @@ unsigned int debug;
 struct urngd {
 	struct uloop_fd rnd_fd;
 	struct rand_data *ec;
-	struct rand_pool_info *rpi;
 };
 
 static struct urngd urngd_service;
@@ -75,53 +74,40 @@ static inline void memset_secure(void *s, int c, size_t n)
 	__asm__ __volatile__("" : : "r" (s) : "memory");
 }
 
-static size_t write_entropy(struct urngd *u, char *buf, size_t len,
-			    size_t entropy_bytes)
+static size_t write_entropy(struct urngd *u, struct rand_pool_info *rpi)
 {
 	int ret;
-	size_t written = 0;
-
-	/* value is in bits */
-	u->rpi->entropy_count = (entropy_bytes * 8);
-	u->rpi->buf_size = len;
-	memcpy(u->rpi->buf, buf, len);
-	memset(buf, 0, len);
-
-	ret =  ioctl(u->rnd_fd.fd, RNDADDENTROPY, u->rpi);
+	ret =  ioctl(u->rnd_fd.fd, RNDADDENTROPY, rpi);
 	if (0 > ret) {
 		ERROR("error injecting entropy: %s\n", strerror(errno));
+		return 0;
 	} else {
-		DEBUG(1, "injected %zub (%zub of entropy)\n", len, entropy_bytes);
-		written = len;
+		DEBUG(1, "injected %ub (%ub of entropy)\n",
+			rpi->buf_size, rpi->entropy_count/8);
+		ret = rpi->buf_size;
 	}
 
-	u->rpi->entropy_count = 0;
-	u->rpi->buf_size = 0;
-	memset(u->rpi->buf, 0, len);
-
-	return written;
+	return ret;
 }
 
 static size_t gather_entropy(struct urngd *u)
 {
+	ssize_t ent;
 	size_t ret = 0;
-	char buf[(ENTROPYBYTES * OVERSAMPLINGFACTOR)];
+	struct rand_pool_info *rpi = alloca(sizeof(*rpi) + ENTROPYPOOLBYTES);
 
-	if (jent_read_entropy(u->ec, buf, sizeof(buf)) < 0) {
+	ent = jent_read_entropy(u->ec, (char *)&rpi->buf[0], ENTROPYPOOLBYTES);
+	if (ent < 0) {
 		ERROR("cannot read entropy\n");
 		return 0;
 	}
 
-	ret = write_entropy(u, buf, sizeof(buf), ENTROPYBYTES);
-	if (sizeof(buf) != ret) {
-		ERROR("injected %zub of entropy, less then %zub expected\n",
-		      ret, sizeof(buf));
-	} else {
-		ret = sizeof(buf);
-	}
+	rpi->buf_size = ENTROPYPOOLBYTES;
+	rpi->entropy_count = 8 * ENTROPYBYTES;
 
-	memset_secure(buf, 0, sizeof(buf));
-	DEBUG(2, DEV_RANDOM " fed with %zub of entropy\n", ret);
+	ret = write_entropy(u, rpi);
+
+	memset_secure(&rpi->buf, 0, ENTROPYPOOLBYTES);
 
 	return ret;
 }
@@ -141,12 +127,6 @@ static void urngd_done(struct urngd *u)
 		u->ec = NULL;
 	}
 
-	if (u->rpi) {
-		memset(u->rpi, 0, ENTROPYPOOLBYTES);
-		free(u->rpi);
-		u->rpi = NULL;
-	}
-
 	if (u->rnd_fd.fd) {
 		close(u->rnd_fd.fd);
 		u->rnd_fd.fd = 0;
@@ -164,12 +144,6 @@ static bool urngd_init(struct urngd *u)
 	u->ec = jent_entropy_collector_alloc(1, 0);
 	if (!u->ec) {
 		ERROR("jent-rng alloc failed\n");
-		return false;
-	}
-
-	u->rpi = malloc(ENTROPYPOOLBYTES);
-	if (!u->rpi) {
-		ERROR("rand pool alloc failed\n");
 		return false;
 	}
 
