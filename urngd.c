@@ -50,10 +50,8 @@
 #include "jitterentropy.h"
 
 #define ENTROPYBYTES 32
-#define ENTROPYTHRESH 1024
 #define OVERSAMPLINGFACTOR 2
 #define DEV_RANDOM "/dev/random"
-#define ENTROPYAVAIL "/proc/sys/kernel/random/entropy_avail"
 #define ENTROPYPOOLBYTES \
 		(ENTROPYBYTES * OVERSAMPLINGFACTOR * sizeof(char))
 
