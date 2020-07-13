@@ -73,7 +73,7 @@ static inline void memset_secure(void *s, int c, size_t n)
 	__asm__ __volatile__("" : : "r" (s) : "memory");
 }
 
-static size_t write_entropy(struct urngd *u, struct rand_pool_info *rpi)
+static size_t write_entropy(struct urngd *u, struct rand_pool_info *rpi, char *src)
 {
 	int ret;
 	ret =  ioctl(u->rnd_fd.fd, RNDADDENTROPY, rpi);
@@ -81,8 +81,8 @@ static size_t write_entropy(struct urngd *u, struct rand_pool_info *rpi)
 		ERROR("error injecting entropy: %s\n", strerror(errno));
 		return 0;
 	} else {
-		DEBUG(1, "injected %ub (%ub of entropy)\n",
-			rpi->buf_size, rpi->entropy_count/8);
+		DEBUG(1, "injected %ub (%ub of entropy) from %s\n",
+			rpi->buf_size, rpi->entropy_count/8, src);
 		ret = rpi->buf_size;
 	}
 
@@ -104,7 +104,7 @@ static size_t gather_jitter_entropy(struct urngd *u)
 	rpi->buf_size = ENTROPYPOOLBYTES;
 	rpi->entropy_count = 8 * ENTROPYBYTES;
 
-	ret = write_entropy(u, rpi);
+	ret = write_entropy(u, rpi, "jitter");
 
 	memset_secure(&rpi->buf, 0, ENTROPYPOOLBYTES);
 
@@ -127,7 +127,7 @@ static size_t gather_src_entropy(struct urngd *u) {
 		/* Read some bytes from the source; stir those in, too */
 		rpi->buf_size = ent;
 		rpi->entropy_count = 8 * ent;
-		ret = write_entropy(u, rpi);
+		ret = write_entropy(u, rpi, "source");
 	} else {
 		/* No luck this time around */
 		ret = 0;
