@@ -61,6 +61,7 @@ unsigned int debug;
 
 struct urngd {
 	struct uloop_fd rnd_fd;
+	struct uloop_fd src_fd;
 	struct rand_data *ec;
 };
 
@@ -88,7 +89,7 @@ static size_t write_entropy(struct urngd *u, struct rand_pool_info *rpi)
 	return ret;
 }
 
-static size_t gather_entropy(struct urngd *u)
+static size_t gather_jitter_entropy(struct urngd *u)
 {
 	ssize_t ent;
 	size_t ret = 0;
@@ -110,12 +111,48 @@ static size_t gather_entropy(struct urngd *u)
 	return ret;
 }
 
+static size_t gather_src_entropy(struct urngd *u) {
+	static const size_t src_bytes = 1024;
+	struct rand_pool_info *rpi = alloca(sizeof(*rpi) + src_bytes);
+	ssize_t ent;
+	size_t ret;
+
+	if ((u->src_fd.fd < 0) || (u->src_fd.registered)) {
+		/* No source or source still waiting for available bytes */
+		return 0;
+	}
+
+	ent = read(u->src_fd.fd, (char *)&rpi->buf[0], src_bytes);
+	if (ent > 0) {
+		/* Read some bytes from the source; stir those in, too */
+		rpi->buf_size = ent;
+		rpi->entropy_count = 8 * ent;
+		ret = write_entropy(u, rpi);
+	} else {
+		/* No luck this time around */
+		ret = 0;
+
+		/* Go back to waiting for the source to be ready */
+		uloop_fd_add(&u->src_fd, ULOOP_READ);
+	}
+
+	memset_secure(&rpi->buf, 0, ent);
+
+	return ret;
+}
+
 static void low_entropy_cb(struct uloop_fd *ufd, unsigned int events)
 {
 	struct urngd *u = container_of(ufd, struct urngd, rnd_fd);
 
 	DEBUG(2, DEV_RANDOM " signals low entropy\n");
-	gather_entropy(u);
+	gather_jitter_entropy(u);
+	gather_src_entropy(u);
+}
+
+static void src_ready_cb(struct uloop_fd *ufd, unsigned int events)
+{
+	uloop_fd_delete(ufd);
 }
 
 static void urngd_done(struct urngd *u)
@@ -128,6 +165,11 @@ static void urngd_done(struct urngd *u)
 	if (u->rnd_fd.fd) {
 		close(u->rnd_fd.fd);
 		u->rnd_fd.fd = 0;
+	}
+
+	if (u->src_fd.fd >= 0) {
+		close(u->src_fd.fd);
+		u->src_fd.fd = -1;
 	}
 }
 
@@ -154,6 +196,18 @@ static bool urngd_init(struct urngd *u)
 
 	uloop_fd_add(&u->rnd_fd, ULOOP_WRITE);
 
+	if (u->src_fd.fd >= 0) {
+		int ret;
+
+		u->src_fd.cb = src_ready_cb;
+		ret = uloop_fd_add(&u->src_fd, ULOOP_READ);
+		if (ret == -1 && errno == EPERM) {
+			LOG("Source (-f) does not support polling;"
+				" assuming that's OK.");
+			u->src_fd.registered = false;
+		}
+	}
+
 	return true;
 }
 
@@ -164,6 +218,7 @@ static int usage(const char *prog)
 #ifdef URNGD_DEBUG
 		"	-d <level>	Enable debug messages\n"
 #endif
+		"	-f <file>	Source entropy from <file>\n"
 		"	-S		Print messages to stdout\n"
 		"\n", prog);
 	return 1;
@@ -182,13 +237,24 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	while ((ch = getopt(argc, argv, "d:S")) != -1) {
+	urngd_service.src_fd.fd = -1;
+
+	while ((ch = getopt(argc, argv, "d:f:S")) != -1) {
 		switch (ch) {
 #ifdef URNGD_DEBUG
 		case 'd':
 			debug = atoi(optarg);
 			break;
 #endif
+		case 'f':
+			urngd_service.src_fd.fd =
+				open(optarg, O_RDONLY | O_NONBLOCK);
+			if (urngd_service.src_fd.fd < 0) {
+				ERROR("%s open failed: %s\n",
+					optarg, strerror(errno));
+				return -1;
+			}
+			break;
 		case 'S':
 			ulog_channels = ULOG_STDIO;
 			break;
@@ -207,7 +273,7 @@ int main(int argc, char **argv)
 
 	LOG("v%s started.\n", URNGD_VERSION);
 
-	gather_entropy(&urngd_service);
+	gather_jitter_entropy(&urngd_service);
 
 	uloop_run();
 	uloop_done();
