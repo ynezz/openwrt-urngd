@@ -1,0 +1,35 @@
+--- a/3rdparty/jitterentropy-rngd/jitterentropy-base.c
++++ b/3rdparty/jitterentropy-rngd/jitterentropy-base.c
+@@ -1189,8 +1189,10 @@ struct rand_data *jent_entropy_collector
+ 	 * and the user requests it not to be used, do not allocate
+ 	 * the Jitter RNG instance.
+ 	 */
++#ifdef JENT_CONF_ENABLE_INTERNAL_TIMER
+ 	if (jent_force_internal_timer && (flags & JENT_DISABLE_INTERNAL_TIMER))
+ 		return NULL;
++#endif
+ 
+ 	entropy_collector = jent_zalloc(sizeof(struct rand_data));
+ 	if (NULL == entropy_collector)
+--- a/3rdparty/jitterentropy-rngd/jitterentropy.h
++++ b/3rdparty/jitterentropy-rngd/jitterentropy.h
+@@ -59,7 +59,7 @@
+  * must offer POSIX threads. If this option is disabled, no linking
+  * with the POSIX threads library is needed.
+  */
+-#define JENT_CONF_ENABLE_INTERNAL_TIMER
++//#define JENT_CONF_ENABLE_INTERNAL_TIMER
+ 
+ /*
+  * Disable the loop shuffle operation
+--- a/3rdparty/jitterentropy-rngd/Makefile
++++ b/3rdparty/jitterentropy-rngd/Makefile
+@@ -32,7 +32,7 @@ OBJS := $(C_OBJS)
+ 
+ INCLUDE_DIRS :=
+ LIBRARY_DIRS :=
+-LIBRARIES := rt pthread
++LIBRARIES := rt
+ 
+ CFLAGS += $(foreach includedir,$(INCLUDE_DIRS),-I$(includedir))
+ LDFLAGS += $(foreach librarydir,$(LIBRARY_DIRS),-L$(librarydir))

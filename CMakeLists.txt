@@ -22,6 +22,9 @@ ADD_EXECUTABLE(urngd
 )
 TARGET_LINK_LIBRARIES(urngd ${ubox})
 
+ADD_CUSTOM_TARGET(patch-jten quilt push -aqf || true)
+ADD_DEPENDENCIES(urngd patch-jten)
+
 # jitter RNG must not be compiled with optimizations
 SET_SOURCE_FILES_PROPERTIES(${JTEN_DIR}/jitterentropy-base.c PROPERTIES COMPILE_FLAGS -O0)
 
